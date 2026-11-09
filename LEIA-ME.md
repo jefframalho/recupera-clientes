@@ -43,6 +43,10 @@ Para gerar um **APK** a partir do site já hospedado, use o PWABuilder (pwabuild
 
 O login com Google pode não funcionar dentro de um APK do tipo WebView. O login com e-mail e senha funciona normalmente.
 
+## Importar por foto
+
+Em **Importar planilha** há a opção **Foto da lista**: o app lê nomes e telefones de uma foto, mostra o texto reconhecido numa caixa e você corrige antes de importar. A leitura roda no navegador (Tesseract.js) e precisa de internet na primeira vez. Dá melhor resultado com foto reta, bem iluminada e letra legível. Letra cursiva e fotos tortas costumam errar, por isso sempre confira os telefones.
+
 ## Planilha para importar
 
 Primeira linha com os títulos: Nome, Negócio, Telefone, Motivo, Origem. Só nome ou telefone já bastam. Clientes com telefone repetido são ignorados.

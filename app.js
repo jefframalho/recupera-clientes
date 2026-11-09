@@ -364,6 +364,7 @@ function importForm(){
   var im=S.imp||(S.imp=newImp());
   var h='<div class="dr-head"><div><h2>Importar planilha</h2><p class="sub">O app lê o arquivo e cadastra todos de uma vez</p></div><button class="icon" data-action="close" aria-label="Fechar">×</button></div>';
   h+='<div class="blk"><h3>Arquivo</h3><p class="hint">Aceita Excel (.xlsx, .xls) e CSV. Coloque títulos na primeira linha, como Nome, Negócio, Telefone, Motivo e Origem. Só o nome ou o telefone já bastam, e a ordem das colunas não importa.</p><input class="in" type="file" id="imp-file" accept=".xlsx,.xls,.csv,.tsv,.txt" aria-label="Escolher planilha">'+(im.name?'<p class="hint">Arquivo lido: '+esc(im.name)+'</p>':"")+'</div>';
+  h+='<div class="blk"><h3>Foto da lista</h3><p class="hint">Tire uma foto ou escolha da galeria uma lista com nomes e telefones. O app lê o texto, mostra o que entendeu logo abaixo e você corrige antes de importar. Funciona melhor com foto reta, bem iluminada e letra legível. A primeira leitura baixa o leitor e pode demorar um pouco.</p><input class="in" type="file" id="imp-photo" accept="image/*" multiple aria-label="Escolher foto da lista"><p class="hint" id="ocr-status" role="status" hidden></p></div>';
   h+='<div class="blk"><h3>Ou cole as linhas</h3><textarea id="imp-text" placeholder="Copie as linhas da planilha, com a linha de títulos, e cole aqui" aria-label="Linhas coladas">'+esc(im.text)+'</textarea><div class="row"><button class="btn ghost sm" data-action="imptext">Ler texto colado</button></div></div>';
   if(im.err)h+='<p class="err">'+esc(im.err)+'</p>';
   if(im.ready&&im.rows.length){
@@ -405,6 +406,83 @@ function doImport(){
   renderDrawer();render(false);
   toast(list.length+(list.length===1?" cliente importado.":" clientes importados."));
   if(DB)writeAll(list);else saveLocal();
+}
+
+/* ---------- leitura de foto (OCR no próprio navegador) ---------- */
+var PH_RE=/\(?\d{2}\)?[\s.\-]*9?[\s.\-]*\d{4}[\s.\-]*\d{4}/;
+function ocrToLines(raw){
+  var lines=String(raw||"").split(/\r?\n/).map(function(l){return l.trim();}).filter(Boolean);
+  var out=[],pending="";
+  lines.forEach(function(line){
+    var m=line.match(PH_RE),d=m?digits(m[0]):"";
+    var hasPhone=m&&d.length>=10&&d.length<=13;
+    var rest=(hasPhone?line.replace(m[0],""):line).replace(/[|;,_\u2013\u2014\u2022*\[\]{}<>]+/g," ").replace(/^\s*\d{1,3}\s*[.)\-]\s+/,"").replace(/^[\s\-.:]+|[\s\-.:]+$/g,"").replace(/\s{2,}/g," ").trim();
+    if(hasPhone){
+      var nome=rest||pending;
+      if(nome||d)out.push(nome+";"+fmtPhone(m[0].trim()));
+      pending="";
+    }else{
+      pending=/[A-Za-z\u00C0-\u00FF]{2,}/.test(rest)?rest:"";
+    }
+  });
+  return out;
+}
+function loadOcr(){
+  return new Promise(function(res,rej){
+    if(window.Tesseract)return res(window.Tesseract);
+    var s=document.createElement("script");
+    s.src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+    s.onload=function(){window.Tesseract?res(window.Tesseract):rej(new Error("sem leitor"));};
+    s.onerror=function(){rej(new Error("sem leitor"));};
+    document.head.appendChild(s);
+  });
+}
+function shrink(file){
+  return new Promise(function(res){
+    var url=URL.createObjectURL(file),img=new Image();
+    img.onload=function(){
+      var max=2200,k=Math.min(1,max/Math.max(img.width,img.height));
+      if(k>=1){URL.revokeObjectURL(url);return res(file);}
+      var c=document.createElement("canvas");c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);
+      c.toBlob(function(b){res(b||file);},"image/jpeg",0.9);
+    };
+    img.onerror=function(){URL.revokeObjectURL(url);res(file);};
+    img.src=url;
+  });
+}
+async function handlePhotos(files){
+  var st=function(msg){var el=$("#ocr-status");if(el){el.textContent=msg;el.hidden=!msg;}};
+  var list=Array.prototype.slice.call(files||[]);
+  if(!list.length||!S.imp)return;
+  var rows=[],names=[];
+  try{
+    st("Carregando o leitor de texto…");
+    var T=await loadOcr();
+    for(var i=0;i<list.length;i++){
+      var prefix="Foto "+(i+1)+" de "+list.length+": ";
+      st(prefix+"preparando…");
+      var img=await shrink(list[i]);
+      var r=await T.recognize(img,"por",{logger:function(m){
+        if(m&&m.status==="recognizing text")st(prefix+"lendo "+Math.round((m.progress||0)*100)+"%");
+        else if(m&&m.status)st(prefix+"preparando…");
+      }});
+      rows=rows.concat(ocrToLines(r&&r.data&&r.data.text));
+      names.push(list[i].name||"foto");
+    }
+  }catch(e){
+    st("");
+    if(S.importMode&&S.imp){S.imp.err="Não consegui ler a foto. Confira a internet e tente de novo, ou digite as linhas na caixa abaixo.";renderDrawer();}
+    return;
+  }
+  if(!S.importMode||!S.imp)return;
+  var mp=S.imp.motivoPadrao;S.imp=newImp();S.imp.motivoPadrao=mp;
+  if(!rows.length){S.imp.err="Não achei nomes com telefone na foto. Tente uma foto mais reta e bem iluminada, ou digite as linhas na caixa abaixo.";renderDrawer();return;}
+  S.imp.text="Nome;Telefone\n"+rows.join("\n");
+  try{buildPreview(parseDelimited(S.imp.text));}catch(x){S.imp.err="Não consegui montar a lista.";}
+  S.imp.name=names.join(", ");
+  renderDrawer();
+  toast("Foto lida. Confira os dados antes de importar.");
 }
 
 /* ---------- ações ---------- */
@@ -502,6 +580,7 @@ document.addEventListener("input",function(e){
 });
 document.addEventListener("change",function(e){
   var t=e.target;
+  if(t.id==="imp-photo"){if(t.files&&t.files.length&&S.imp)handlePhotos(t.files);return;}
   if(t.id==="imp-file"){var fl=t.files&&t.files[0];if(fl&&S.imp)handleFile(fl);return;}
   if(t.id==="imp-motivo"&&S.imp){S.imp.motivoPadrao=t.value;renderDrawer();return;}
   if(t.id==="vend"){
