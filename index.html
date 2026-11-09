@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Recupera Clientes</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#FFB71B">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Recupera">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: cabeçalho com abas, resumo em formato de comprovante de maquininha, lista de clientes e ficha em painel lateral */
+:root{
+  --bg:#EDEBEE; --surface:#FFFFFF; --surface-2:#F5F4F6; --ink:#2A292A; --muted:#656365; --line:#D9D6DB;
+  --primary:#FFB71B; --on-primary:#2A292A; --brand-dark:#484748; --wa:#15803D; --on-wa:#FFFFFF; --focus:#2F6FDB;
+  --st-novo:#4A5E82; --st-contatado:#2A64C9; --st-negociando:#8F5A06; --st-recuperado:#1B7A41; --st-perdido:#A63D52; --on-st:#FFFFFF;
+  --warn-bg:#FFF2D6; --warn-ink:#5E3B00; --danger:#B3261E;
+  --f-display:'Familjen Grotesk','Segoe UI',system-ui,sans-serif;
+  --f-body:'Hanken Grotesk','Segoe UI',system-ui,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#171617; --surface:#212021; --surface-2:#2A292A; --ink:#EDEBEE; --muted:#A5A2A6; --line:#3A383B;
+    --primary:#FFB71B; --on-primary:#2A292A; --brand-dark:#484748; --wa:#22C55E; --on-wa:#04210F; --focus:#7FA8F5;
+    --st-novo:#A3B6D8; --st-contatado:#82ABF7; --st-negociando:#E8AE55; --st-recuperado:#62CD8C; --st-perdido:#F08CA2; --on-st:#0C1311;
+    --warn-bg:#3A2D0E; --warn-ink:#F1D08B; --danger:#FF8A80;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#171617; --surface:#212021; --surface-2:#2A292A; --ink:#EDEBEE; --muted:#A5A2A6; --line:#3A383B;
+  --primary:#FFB71B; --on-primary:#2A292A; --brand-dark:#484748; --wa:#22C55E; --on-wa:#04210F; --focus:#7FA8F5;
+  --st-novo:#A3B6D8; --st-contatado:#82ABF7; --st-negociando:#E8AE55; --st-recuperado:#62CD8C; --st-perdido:#F08CA2; --on-st:#0C1311;
+  --warn-bg:#3A2D0E; --warn-ink:#F1D08B; --danger:#FF8A80;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink); font:400 15px/1.45 var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:20px 56px; min-height:100%;
+}
+body.lock{overflow:hidden}
+button,input,select,textarea{font-family:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.app{max-width:1080px;margin:0 auto}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.brand{min-width:0}
+h1{margin:0;font:700 28px/1.1 var(--f-display);letter-spacing:-.01em;text-wrap:balance}
+.brand p{margin:4px 0 0;color:var(--muted)}
+h2{margin:0;font:700 20px/1.2 var(--f-display);text-wrap:balance}
+h3{margin:0;font:500 11px var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.sub{margin:2px 0 0;color:var(--muted);overflow-wrap:anywhere}
+
+.btn{font:600 14px var(--f-body);min-height:40px;padding:0 16px;border-radius:8px;border:1px solid var(--primary);background:var(--primary);color:var(--on-primary);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;text-align:center}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.wa{background:var(--wa);border-color:var(--wa);color:var(--on-wa)}
+.btn.danger{background:transparent;color:var(--danger);border-color:var(--danger)}
+.btn.sm{min-height:32px;padding:0 10px;font-size:13px}
+.btn[aria-disabled="true"]{opacity:.45;pointer-events:none}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-top:18px;overflow-x:auto}
+.tab{background:none;border:0;padding:10px 12px;font:600 14px var(--f-body);color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap;cursor:pointer}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--primary)}
+
+#notice{display:grid;gap:8px;margin-top:12px}
+.notice{padding:10px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn-ink);font-size:14px;display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+
+.receipt{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 12px 14px}
+.rc-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font:500 12px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-bottom:8px;border-bottom:1px dashed var(--line)}
+.rc-head button{background:none;border:0;color:var(--ink);font:600 12px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:4px 0}
+.rc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:4px;margin-top:8px}
+.rc-cell{background:none;border:1px solid transparent;border-radius:6px;padding:8px 8px;text-align:left;cursor:pointer;color:var(--ink);display:grid;gap:2px;min-width:0}
+.rc-cell b{font:600 26px/1 var(--f-mono);font-variant-numeric:tabular-nums}
+.rc-cell span{font-size:12px;color:var(--muted)}
+.rc-cell.on{border-color:var(--primary);background:var(--surface-2)}
+.rc-cell.due b{color:var(--st-negociando)}
+.fbar{display:flex;height:8px;margin-top:10px;border-radius:2px;overflow:hidden;background:var(--surface-2)}
+.fbar i{display:block;background:var(--st);min-width:0}
+
+.listhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:22px}
+.listhead span{font:500 13px var(--f-mono);color:var(--muted)}
+.list{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));margin-top:10px}
+.card{text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:grid;gap:6px;cursor:pointer;color:var(--ink);font:inherit;min-width:0}
+.card:hover{border-color:var(--primary)}
+.card-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.nm{font:700 16px var(--f-display);overflow-wrap:anywhere;min-width:0}
+.card .sub{font-size:14px}
+.card-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.pill{font:600 11px var(--f-mono);text-transform:uppercase;letter-spacing:.06em;padding:3px 8px;border-radius:999px;color:var(--st);background:color-mix(in srgb,var(--st) 14%,var(--surface));white-space:nowrap}
+.st-novo{--st:var(--st-novo)}.st-contatado{--st:var(--st-contatado)}.st-negociando{--st:var(--st-negociando)}.st-recuperado{--st:var(--st-recuperado)}.st-perdido{--st:var(--st-perdido)}
+.nb{font:600 12px var(--f-mono);padding:2px 6px;border-radius:4px;background:var(--surface-2);color:var(--muted)}
+.nb.late{background:color-mix(in srgb,var(--st-perdido) 16%,var(--surface));color:var(--st-perdido)}
+.nb.today{background:color-mix(in srgb,var(--st-negociando) 18%,var(--surface));color:var(--st-negociando)}
+.tag-ex{font:500 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;border:1px dashed var(--line);border-radius:4px;padding:1px 5px}
+.empty{margin-top:16px;padding:28px 16px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:8px}
+.empty b{color:var(--ink)}
+
+.scrim{position:fixed;inset:0;background:rgba(8,16,14,.5);z-index:30}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--surface);border-left:1px solid var(--line);z-index:40;overflow-y:auto;
+  padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(28px,env(safe-area-inset-bottom,0px)) 16px;
+  display:grid;gap:20px;align-content:start;animation:slide .18s ease-out}
+@keyframes slide{from{transform:translateX(16px);opacity:0}}
+@media (prefers-reduced-motion:reduce){.drawer{animation:none}}
+.dr-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.dr-head>div{min-width:0}
+.icon{background:none;border:1px solid var(--line);border-radius:8px;width:40px;height:40px;font-size:22px;line-height:1;color:var(--ink);cursor:pointer;flex:none}
+.blk{display:grid;gap:8px}
+.ex-note{margin:0;font-size:13px;color:var(--muted);border:1px dashed var(--line);border-radius:6px;padding:8px 10px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.segb{font:600 13px var(--f-body);padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.segb.on{background:var(--st);border-color:var(--st);color:var(--on-st)}
+.fld{display:grid;gap:4px;min-width:0}
+label.lb{font:500 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.in,.sel,textarea{width:100%;font:16px/1.4 var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-height:40px}
+textarea{resize:vertical;min-height:104px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:480px){.grid2{grid-template-columns:1fr}}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.phone{font:500 14px var(--f-mono);user-select:all;overflow-wrap:anywhere}
+.hint{margin:0;font-size:13px;color:var(--muted)}
+.guide{margin:0;font-size:14px;background:var(--surface-2);border-radius:6px;padding:9px 11px}
+.tl{list-style:none;margin:0;padding:0}
+.tl li{display:grid;grid-template-columns:88px minmax(0,1fr);gap:10px;padding:10px 0;border-top:1px dashed var(--line)}
+.tl time{font:500 12px var(--f-mono);color:var(--muted)}
+.tl b{font:600 12px var(--f-mono);text-transform:uppercase;letter-spacing:.06em}
+.tl p{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+.tbl table{border-collapse:collapse;width:100%;font-size:13px}
+.tbl th{font:500 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--surface-2)}
+.tbl th,.tbl td{padding:6px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl tr:last-child td{border-bottom:0}
+.err{margin:0;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--danger) 14%,var(--surface));color:var(--danger);font-size:14px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,calc(env(safe-area-inset-bottom,0px) + 12px));z-index:60;background:var(--primary);color:var(--on-primary);padding:10px 14px;border-radius:8px;font:600 14px var(--f-body);max-width:calc(100% - 32px)}
+
+.view-gap{display:grid;gap:14px;margin-top:16px}
+.intro{margin:0;color:var(--muted);max-width:65ch}
+details.ob{background:var(--surface);border:1px solid var(--line);border-radius:8px}
+details.ob summary{cursor:pointer;padding:12px 14px;font:700 15px var(--f-display);list-style:none}
+details.ob summary::-webkit-details-marker{display:none}
+details.ob[open] summary{border-bottom:1px dashed var(--line)}
+.ob-body{padding:12px 14px;display:grid;gap:10px}
+.say{background:var(--surface-2);border-radius:6px;padding:10px 12px;white-space:pre-wrap;margin:0}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.stat b{display:block;font:600 28px/1.1 var(--f-mono);font-variant-numeric:tabular-nums}
+.stat span{font-size:13px;color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;display:grid;gap:6px}
+.rowbar{display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) auto;gap:10px;align-items:center;padding:5px 0}
+.rowbar .lab{overflow-wrap:anywhere;font-size:14px}
+.rowbar .num{font:500 13px var(--f-mono);color:var(--muted);white-space:nowrap}
+@media (max-width:480px){.rowbar{grid-template-columns:minmax(0,1fr) auto}.rowbar .bar{grid-column:1/-1;order:3}}
+.bar{height:10px;background:var(--surface-2);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--st,var(--primary))}
+.days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;align-items:end}
+.day{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}
+.day i{display:block;width:100%;background:var(--primary);border-radius:2px 2px 0 0}
+.day small{font:500 11px var(--f-mono);color:var(--muted)}
+.day .v{font:600 12px var(--f-mono)}
+
+/* Cores da marca no topo deste <style>: --primary (amarelo) e --brand-dark (cinza escuro). */
+body{margin:0}
+[hidden]{display:none!important}
+.logo-plate{display:inline-flex;align-items:center;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 10px;min-height:40px}
+.logo{display:block;height:28px;width:auto;max-width:140px}
+.wordmark{font:700 18px var(--f-display);color:#484748;letter-spacing:-.01em}
+.brandrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.userbar{display:flex;justify-content:flex-end;align-items:center;gap:10px;font-size:13px;color:var(--muted);margin-bottom:10px;flex-wrap:wrap}
+.userbar b{color:var(--ink)}
+.foot{margin:28px 0 0;font-size:12px;color:var(--muted);text-align:center}
+.authwrap{min-height:100vh;display:grid;place-items:center;padding-block:24px}
+.authcard{width:min(420px,100%);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:22px;display:grid;gap:14px}
+.authcard section{display:grid;gap:12px}
+.stack{display:grid;gap:12px}
+.between{justify-content:space-between}
+.link{background:none;border:0;padding:4px 0;color:var(--ink);font:600 13px var(--f-body);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.ok{margin:0;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--st-recuperado) 14%,var(--surface));color:var(--st-recuperado);font-size:14px}
+.authcard p{margin:0}
+</style>
+</head>
+<body>
+
+<main id="auth" class="authwrap">
+  <div class="authcard">
+    <div class="brandrow"><span class="logo-plate"><img class="logo" src="assets/logo.png" alt="FaturePag" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="wordmark" hidden>FaturePag</span></span><h2>Recupera Clientes</h2></div>
+
+    <section id="v-loading"><p class="sub">Carregando…</p></section>
+
+    <section id="v-setup" hidden>
+      <h2>Falta configurar o Firebase</h2>
+      <p>Abra o arquivo <b>firebase-config.js</b> e cole as chaves do seu projeto. O passo a passo está no <b>LEIA-ME.md</b>.</p>
+    </section>
+
+    <section id="v-login" hidden>
+      <h2>Entrar</h2>
+      <form id="f-login" class="stack">
+        <div class="fld"><label class="lb" for="l-email">E-mail</label><input class="in" id="l-email" type="email" autocomplete="email" required></div>
+        <div class="fld"><label class="lb" for="l-senha">Senha</label><input class="in" id="l-senha" type="password" autocomplete="current-password" required></div>
+        <p id="m-login" hidden></p>
+        <button class="btn" type="submit">Entrar</button>
+      </form>
+      <button class="btn ghost" id="b-google" type="button">Entrar com Google</button>
+      <div class="row between"><button class="link" id="b-reset" type="button">Esqueci a senha</button><button class="link" id="b-to-signup" type="button">Criar conta</button></div>
+    </section>
+
+    <section id="v-signup" hidden>
+      <h2>Criar conta</h2>
+      <p class="sub">Use o e-mail que foi liberado para você.</p>
+      <form id="f-signup" class="stack">
+        <div class="fld"><label class="lb" for="s-nome">Seu nome</label><input class="in" id="s-nome" autocomplete="name" required></div>
+        <div class="fld"><label class="lb" for="s-email">E-mail</label><input class="in" id="s-email" type="email" autocomplete="email" required></div>
+        <div class="fld"><label class="lb" for="s-senha">Senha (mínimo 6 caracteres)</label><input class="in" id="s-senha" type="password" autocomplete="new-password" minlength="6" required></div>
+        <p id="m-signup" hidden></p>
+        <button class="btn" type="submit">Criar conta</button>
+      </form>
+      <div class="row"><button class="link" id="b-to-login" type="button">Já tenho conta</button></div>
+    </section>
+
+    <section id="v-verify" hidden>
+      <h2>Confirme seu e-mail</h2>
+      <p>Enviamos um link de confirmação para <b id="verify-email"></b>. Abra o e-mail, toque no link e volte aqui. Olhe também o spam.</p>
+      <p id="m-verify" hidden></p>
+      <div class="row"><button class="btn" id="b-verified" type="button">Já confirmei</button><button class="btn ghost" id="b-resend" type="button">Reenviar e-mail</button></div>
+      <div class="row"><button class="link" id="b-out1" type="button">Sair</button></div>
+    </section>
+
+    <section id="v-denied" hidden>
+      <h2>E-mail ainda não liberado</h2>
+      <p>O e-mail <b id="denied-email"></b> ainda não foi liberado para usar o sistema. Peça a quem administra para liberar e tente de novo.</p>
+      <div class="row"><button class="btn" id="b-retry" type="button">Tentar de novo</button><button class="btn ghost" id="b-out2" type="button">Sair</button></div>
+    </section>
+
+    <p class="sub" style="font-size:12px">Ferramenta criada por consultores. Não é um sistema oficial da FaturePag.</p>
+  </div>
+</main>
+
+<div id="appwrap" hidden>
+  <div class="app">
+    <div class="userbar"><span>Conectado como <b id="who"></b></span><button class="btn sm" id="install" type="button" hidden>Instalar app</button><button class="btn sm ghost" id="logout" type="button">Sair</button></div>
+    <header class="top">
+      <div class="brand">
+        <div class="brandrow"><span class="logo-plate"><img class="logo" src="assets/logo.png" alt="FaturePag" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="wordmark" hidden>FaturePag</span></span><h1>Recupera Clientes</h1></div>
+        <p>Clientes que saíram da FaturePag e o que fazer para trazê-los de volta</p>
+      </div>
+      <div class="row">
+        <button class="btn" data-action="new">Novo cliente</button>
+        <button class="btn ghost" data-action="import">Importar planilha</button>
+      </div>
+    </header>
+    <nav class="tabs" role="tablist" aria-label="Seções">
+      <button class="tab" role="tab" data-action="tab" data-tab="clientes">Clientes</button>
+      <button class="tab" role="tab" data-action="tab" data-tab="roteiro">Roteiro de objeções</button>
+      <button class="tab" role="tab" data-action="tab" data-tab="resultados">Resultados</button>
+    </nav>
+    <div id="notice"></div>
+    <section id="summary"></section>
+    <section id="view"></section>
+    <p class="foot">Ferramenta criada por consultores. Não é um sistema oficial da FaturePag.</p>
+  </div>
+  <div class="scrim" id="scrim" data-action="close" hidden></div>
+  <aside class="drawer" id="drawer" tabindex="-1" aria-label="Ficha do cliente" hidden></aside>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function(){
+  if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});});}
+  var ev=null,b=document.getElementById("install");
+  window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();ev=e;if(b)b.hidden=false;});
+  window.addEventListener("appinstalled",function(){if(b)b.hidden=true;ev=null;});
+  if(b)b.addEventListener("click",function(){if(!ev)return;ev.prompt();ev.userChoice.finally(function(){ev=null;b.hidden=true;});});
+})();
+</script>
+<script type="module" src="auth.js"></script>
+</body>
+</html>

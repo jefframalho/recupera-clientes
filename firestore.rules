@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Usuário logado com e-mail confirmado
+    function logado() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    // Logado e com e-mail na lista de liberados (coleção "autorizados")
+    function liberado() {
+      return logado() &&
+        exists(/databases/$(database)/documents/autorizados/$(request.auth.token.email.lower()));
+    }
+
+    // Lista de consultores liberados. O ID do documento é o e-mail em minúsculas.
+    // O consultor só consegue ver o próprio e-mail; quem libera usa o console do Firebase.
+    match /autorizados/{email} {
+      allow get: if logado() && request.auth.token.email.lower() == email;
+      allow list, write: if false;
+    }
+
+    // Clientes de cada consultor: só o dono acessa os próprios.
+    match /usuarios/{uid}/clientes/{id} {
+      allow read, write: if liberado() && request.auth.uid == uid;
+    }
+  }
+}
