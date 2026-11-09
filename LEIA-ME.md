@@ -47,6 +47,30 @@ O login com Google pode não funcionar dentro de um APK do tipo WebView. O login
 
 Em **Importar planilha** há a opção **Foto da lista**: o app lê nomes e telefones de uma foto, mostra o texto reconhecido numa caixa e você corrige antes de importar. A leitura roda no navegador (Tesseract.js) e precisa de internet na primeira vez. Dá melhor resultado com foto reta, bem iluminada e letra legível. Letra cursiva e fotos tortas costumam errar, por isso sempre confira os telefones.
 
+## Gestor e novas regras (importante)
+
+As regras do Firestore mudaram: o arquivo `firestore.rules` agora inclui a área do gestor, a tela de liberar e-mails, as configurações de cada consultor e o aviso de cliente repetido. **Cole o conteúdo novo em Firestore, aba Regras, e toque em Publicar.** Sem isso, as telas novas dão erro de permissão.
+
+Para ser **gestor**: no Firestore crie a coleção `gestores` e, nela, um documento cujo ID é o seu e-mail em minúsculas (pode deixar sem campos). O e-mail também precisa estar em `autorizados`. A coleção `gestores` só se edita pelo console do Firebase, nunca pelo sistema.
+
+O gestor ganha a aba **Equipe**:
+- Números de cada consultor (clientes, em conversa, recuperados, perdidos, taxa, contatos de hoje e dos últimos 7 dias), sem ver nomes de clientes
+- Motivos de saída mais comuns e o que trouxe os clientes de volta
+- Lista de consultores liberados, com botão para liberar ou remover e-mails sem entrar no console
+
+Se a aba Equipe mostrar erro pedindo um índice, abra o console do navegador (F12), toque no link da mensagem e crie o índice. Só acontece na primeira vez.
+
+## O que o sistema faz
+
+- **Busca e filtros:** por nome, telefone ou motivo da saída
+- **Seleção em massa:** botão Selecionar; mudar etapa, marcar retorno ou excluir vários de uma vez
+- **Baixar Excel:** toda a lista, para backup ou relatório
+- **Mensagens próprias:** na aba Ajustes, cada consultor escreve seus textos de WhatsApp (variáveis {nome}, {consultor}, {negocio}, {motivo})
+- **Meta diária:** barra de contatos feitos hoje
+- **Avisos de retorno:** número de pendentes no título da página e, se o consultor ativar em Ajustes, uma notificação ao abrir o sistema. Aviso com o sistema fechado exige um servidor e não está ligado
+- **Cliente repetido:** quando dois consultores cadastram o mesmo telefone, aparece "Também com (nome)". O sistema guarda só o número e o nome de quem cadastrou primeiro, nunca os dados do cliente
+- **O que trouxe de volta:** ao marcar Recuperado, o consultor escolhe o motivo da volta, e isso aparece em Resultados e na aba Equipe
+
 ## Planilha para importar
 
 Primeira linha com os títulos: Nome, Negócio, Telefone, Motivo, Origem. Só nome ou telefone já bastam. Clientes com telefone repetido são ignorados.

@@ -13,16 +13,52 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/autorizados/$(request.auth.token.email.lower()));
     }
 
+    // Liberado e com e-mail na lista de gestores (coleção "gestores")
+    function gestor() {
+      return liberado() &&
+        exists(/databases/$(database)/documents/gestores/$(request.auth.token.email.lower()));
+    }
+
     // Lista de consultores liberados. O ID do documento é o e-mail em minúsculas.
-    // O consultor só consegue ver o próprio e-mail; quem libera usa o console do Firebase.
+    // Cada um enxerga só o próprio e-mail. Gestores veem e editam a lista.
     match /autorizados/{email} {
+      allow get: if (logado() && request.auth.token.email.lower() == email) || gestor();
+      allow list, create, update, delete: if gestor();
+    }
+
+    // Lista de gestores. Só pela tela do Firebase (console). O gestor só consegue ver o próprio e-mail.
+    match /gestores/{email} {
       allow get: if logado() && request.auth.token.email.lower() == email;
       allow list, write: if false;
+    }
+
+    // Perfil de cada consultor (nome). O gestor lê todos.
+    match /usuarios/{uid} {
+      allow read: if liberado() && (request.auth.uid == uid || gestor());
+      allow write: if liberado() && request.auth.uid == uid;
+    }
+
+    // Configurações de cada consultor (mensagens próprias, meta diária)
+    match /usuarios/{uid}/config/{doc} {
+      allow read, write: if liberado() && request.auth.uid == uid;
     }
 
     // Clientes de cada consultor: só o dono acessa os próprios.
     match /usuarios/{uid}/clientes/{id} {
       allow read, write: if liberado() && request.auth.uid == uid;
+    }
+
+    // Gestor lê os clientes de todos (para os números do time).
+    match /{path=**}/clientes/{id} {
+      allow read: if gestor();
+    }
+
+    // Índice de telefones, para avisar quando dois consultores têm o mesmo cliente.
+    // Guarda só o número e o nome de quem cadastrou, nunca os dados do cliente.
+    match /telefones/{num} {
+      allow read: if liberado();
+      allow create: if liberado() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if liberado() && resource.data.uid == request.auth.uid;
     }
   }
 }

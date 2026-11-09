@@ -5,7 +5,7 @@ import {
   GoogleAuthProvider, signInWithPopup, reload
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, doc, getDoc, setDoc, deleteDoc, onSnapshot
+  getFirestore, collection, collectionGroup, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -75,7 +75,13 @@ function iniciar() {
     }
     if (started) return;
     started = true;
-    abrirApp(user, db);
+    let gestor = false;
+    try {
+      gestor = (await getDoc(doc(db, "gestores", String(user.email).toLowerCase()))).exists();
+    } catch (e) {
+      gestor = false;
+    }
+    abrirApp(user, db, gestor);
   });
 
   $("b-to-signup").addEventListener("click", () => { say("m-login", ""); show("v-signup"); });
@@ -141,11 +147,63 @@ function iniciar() {
   $("logout").addEventListener("click", sair);
 }
 
-function abrirApp(user, db) {
+function abrirApp(user, db, gestor) {
   const nome = (user.displayName || String(user.email).split("@")[0]).trim();
+  const email = String(user.email).toLowerCase();
   window.RC_NOME = nome.split(/\s+/)[0];
   window.RC_UID = user.uid;
-  $("who").textContent = nome;
+  window.RC_EMAIL = email;
+  window.RC_GESTOR = !!gestor;
+  $("who").textContent = nome + (gestor ? " (gestor)" : "");
+
+  // Perfil: o gestor usa para mostrar o nome de cada consultor nos números do time.
+  setDoc(doc(db, "usuarios", user.uid), { nome, email }, { merge: true }).catch(() => {});
+
+  const norm = (s) => String(s || "").toLowerCase().trim();
+  window.RC_API = {
+    // Configurações de cada consultor (mensagens próprias e meta diária)
+    async getConfig() {
+      const s = await getDoc(doc(db, "usuarios", user.uid, "config", "geral"));
+      return s.exists() ? s.data() : {};
+    },
+    async saveConfig(data) {
+      await setDoc(doc(db, "usuarios", user.uid, "config", "geral"), data, { merge: true });
+    },
+    // Telefones já cadastrados por outro consultor
+    async checkDup(nums) {
+      const out = {};
+      await Promise.all(nums.map(async (n) => {
+        const s = await getDoc(doc(db, "telefones", n));
+        if (s.exists() && s.data().uid !== user.uid) out[n] = s.data();
+      }));
+      return out;
+    },
+    async regDup(n) {
+      await setDoc(doc(db, "telefones", n), { uid: user.uid, consultor: nome });
+    },
+    async unregDup(n) {
+      await deleteDoc(doc(db, "telefones", n));
+    },
+    // Só para gestores
+    async listTeam() {
+      const users = {};
+      (await getDocs(collection(db, "usuarios"))).docs.forEach((d) => { users[d.id] = d.data(); });
+      const cs = await getDocs(collectionGroup(db, "clientes"));
+      const clients = cs.docs.map((d) => ({ ...d.data(), uid: d.ref.parent.parent.id }));
+      return { users, clients };
+    },
+    async listAuthorized() {
+      const s = await getDocs(collection(db, "autorizados"));
+      return s.docs.map((d) => ({ email: d.id, nome: (d.data() || {}).nome || "" }))
+        .sort((x, y) => x.email.localeCompare(y.email));
+    },
+    async addAuthorized(em, nome) {
+      await setDoc(doc(db, "autorizados", norm(em)), { nome: nome || "" }, { merge: true });
+    },
+    async removeAuthorized(em) {
+      await deleteDoc(doc(db, "autorizados", norm(em)));
+    }
+  };
 
   // Cada consultor só enxerga os próprios clientes: usuarios/{uid}/clientes
   const col = collection(db, "usuarios", user.uid, "clientes");
