@@ -1,0 +1,11 @@
+{
+  "name": "recupera-clientes-functions",
+  "private": true,
+  "description": "Aviso diário de retornos do Recupera Clientes",
+  "main": "index.js",
+  "engines": { "node": "20" },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^5.1.1"
+  }
+}

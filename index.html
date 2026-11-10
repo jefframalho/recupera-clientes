@@ -199,6 +199,38 @@ body{margin:0}
 .warn{margin:0;padding:9px 11px;border-radius:6px;background:var(--warn-bg);color:var(--warn-ink);font-size:14px}
 .tbl tr.tot td{font-weight:700;background:var(--surface-2)}
 .tbl.nums td:not(:first-child),.tbl.nums th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+
+/* Identidade FaturePag: faixa cinza escuro com detalhe amarelo, logo sobre placa branca */
+.top{background:var(--brand-dark);color:#fff;border-radius:10px;padding:16px 18px;border-bottom:4px solid var(--primary);align-items:center}
+.top h1{color:#fff}
+.top .brand p{color:#D9D6DB}
+.top .btn.ghost{color:#fff;border-color:rgba(255,255,255,.45)}
+.tab[aria-selected="true"]{border-bottom-width:3px;font-weight:700}
+.stat{border-left:4px solid var(--primary)}
+.authcard{border-top:4px solid var(--primary)}
+.rc-head{border-bottom-color:var(--primary)}
+
+/* Ranking e gráficos semanais da aba Equipe */
+.rank{display:grid;gap:12px}
+.rk{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:12px;align-items:center}
+.rk .pos{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--surface-2);font:700 14px var(--f-mono)}
+.rk.p1 .pos{background:var(--primary);color:var(--on-primary)}
+.rkmid{display:grid;gap:4px;min-width:0}
+.nm2{font:700 15px var(--f-display);overflow-wrap:anywhere}
+.rk .meta{font:500 12px var(--f-mono);color:var(--muted)}
+.rk .big{font:600 24px var(--f-mono);font-variant-numeric:tabular-nums}
+.days.weeks{grid-template-columns:repeat(8,minmax(0,1fr))}
+.printhead{display:none;margin:0;font:700 16px var(--f-display)}
+
+/* Salvar como PDF (impressão): só o relatório, sem botões nem a lista de e-mails liberados */
+@media print{
+  body{background:#fff;color:#000;padding:0}
+  .userbar,.top .row,.tabs,#notice,#summary,.foot,.scrim,.drawer,.toast,.noprint{display:none!important}
+  .top{border-radius:0}
+  .printhead{display:block}
+  .panel,.stat,.rk{break-inside:avoid;border-color:#bbb}
+  .bar i,.day i,.rk .pos,.top{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
 </style>
 </head>
 <body>
@@ -248,8 +280,9 @@ body{margin:0}
     </section>
 
     <section id="v-denied" hidden>
-      <h2>E-mail ainda não liberado</h2>
-      <p>O e-mail <b id="denied-email"></b> ainda não foi liberado para usar o sistema. Peça a quem administra para liberar e tente de novo.</p>
+      <h2>Não foi possível entrar</h2>
+      <p id="denied-msg">O e-mail <b id="denied-email"></b> ainda não foi liberado para usar o sistema. Peça a quem administra para liberar e tente de novo.</p>
+      <p id="denied-net" hidden>Não consegui conferir a sua liberação agora. Pode ser a internet ou uma instabilidade do sistema. Toque em Tentar de novo em instantes.</p>
       <div class="row"><button class="btn" id="b-retry" type="button">Tentar de novo</button><button class="btn ghost" id="b-out2" type="button">Sair</button></div>
     </section>
 

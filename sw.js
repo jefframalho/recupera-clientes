@@ -11,6 +11,27 @@ self.addEventListener("activate", (e) => {
       .then(() => self.clients.claim())
   );
 });
+// Aviso de retorno com o app fechado (enviado pela função avisoRetornos, no Firebase)
+self.addEventListener("push", (e) => {
+  let p = {};
+  try { p = e.data ? e.data.json() : {}; } catch (_) { p = {}; }
+  const d = p.data || p.notification || p;
+  e.waitUntil(self.registration.showNotification(d.title || "Recupera Clientes", {
+    body: d.body || "Você tem clientes para contatar hoje.",
+    icon: "assets/icon-192.png",
+    badge: "assets/icon-192.png",
+    tag: "retornos",
+    data: { url: d.url || "./" }
+  }));
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || "./";
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((lista) => {
+    for (const c of lista) { if ("focus" in c) return c.focus(); }
+    return self.clients.openWindow(url);
+  }));
+});
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;

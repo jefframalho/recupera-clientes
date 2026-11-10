@@ -7,7 +7,10 @@ import {
 import {
   getFirestore, collection, collectionGroup, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js";
+import {
+  getMessaging, getToken, deleteToken, isSupported as messagingSupported
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
+import { firebaseConfig, vapidKey } from "./firebase-config.js";
 
 const $ = (id) => document.getElementById(id);
 const VIEWS = ["v-loading", "v-setup", "v-login", "v-signup", "v-verify", "v-denied"];
@@ -62,14 +65,19 @@ function iniciar() {
     }
     show("v-loading");
     let liberado = false;
+    let semResposta = false;
     try {
       const snap = await getDoc(doc(db, "autorizados", String(user.email).toLowerCase()));
       liberado = snap.exists();
     } catch (e) {
       liberado = false;
+      // Falta de permissão significa "não liberado". Qualquer outro erro é conexão ou Firebase fora do ar.
+      semResposta = !(e && e.code === "permission-denied");
     }
     if (!liberado) {
       $("denied-email").textContent = user.email || "";
+      $("denied-msg").hidden = semResposta;
+      $("denied-net").hidden = !semResposta;
       show("v-denied");
       return;
     }
@@ -81,7 +89,7 @@ function iniciar() {
     } catch (e) {
       gestor = false;
     }
-    abrirApp(user, db, gestor);
+    abrirApp(user, db, gestor, app);
   });
 
   $("b-to-signup").addEventListener("click", () => { say("m-login", ""); show("v-signup"); });
@@ -147,7 +155,7 @@ function iniciar() {
   $("logout").addEventListener("click", sair);
 }
 
-function abrirApp(user, db, gestor) {
+function abrirApp(user, db, gestor, app) {
   const nome = (user.displayName || String(user.email).split("@")[0]).trim();
   const email = String(user.email).toLowerCase();
   window.RC_NOME = nome.split(/\s+/)[0];
@@ -183,6 +191,34 @@ function abrirApp(user, db, gestor) {
     },
     async unregDup(n) {
       await deleteDoc(doc(db, "telefones", n));
+    },
+    // Avisos de retorno com o app fechado (Firebase Cloud Messaging).
+    // Cada aparelho guarda o próprio token em usuarios/{uid}/dispositivos; uma função agendada envia o aviso todo dia.
+    pushDisponivel() {
+      return !!vapidKey && !String(vapidKey).startsWith("COLE");
+    },
+    async enablePush() {
+      const falha = (code) => Object.assign(new Error(code), { code });
+      if (!window.RC_API.pushDisponivel()) throw falha("sem-chave");
+      if (!("serviceWorker" in navigator) || !("Notification" in window) || !(await messagingSupported())) throw falha("sem-suporte");
+      if ((await Notification.requestPermission()) !== "granted") throw falha("negado");
+      const reg = await navigator.serviceWorker.ready;
+      const token = await getToken(getMessaging(app), { vapidKey, serviceWorkerRegistration: reg });
+      if (!token) throw falha("sem-token");
+      await setDoc(doc(db, "usuarios", user.uid, "dispositivos", token), {
+        token, criadoEm: new Date().toISOString(), aparelho: String(navigator.userAgent || "").slice(0, 120)
+      });
+    },
+    async disablePush() {
+      try {
+        if (await messagingSupported()) {
+          const messaging = getMessaging(app);
+          const reg = await navigator.serviceWorker.ready;
+          const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: reg });
+          if (token) await deleteDoc(doc(db, "usuarios", user.uid, "dispositivos", token));
+          await deleteToken(messaging);
+        }
+      } catch (e) { /* se não deu para apagar, o aviso para de chegar quando o token expirar */ }
     },
     // Só para gestores
     async listTeam() {

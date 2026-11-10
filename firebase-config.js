@@ -9,3 +9,7 @@ export const firebaseConfig = {
   appId: "1:896039050283:web:ee50e8f6f9c347bc209e6e",
   measurementId: "G-QTKNR7DHB5"
 };
+
+// Chave dos avisos com o app fechado (opcional). Firebase, Configurações do projeto, aba Cloud Messaging,
+// "Certificados push da Web", Gerar par de chaves. Cole aqui a chave pública. Sem ela, só o aviso ao abrir o sistema funciona.
+export const vapidKey = "COLE_A_CHAVE_VAPID_AQUI";

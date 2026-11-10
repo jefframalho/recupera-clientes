@@ -60,6 +60,28 @@ O gestor ganha a aba **Equipe**:
 
 Se a aba Equipe mostrar erro pedindo um índice, abra o console do navegador (F12), toque no link da mensagem e crie o índice. Só acontece na primeira vez.
 
+## Aba Equipe: ranking e relatórios
+
+Além dos números por consultor, a aba Equipe agora mostra:
+- **Ranking de recuperados**, com taxa de recuperação, recuperados nos últimos 30 dias e contatos da semana
+- **Gráficos das últimas 8 semanas**: clientes recuperados e contatos feitos (semana de segunda a domingo)
+- **Relatório Excel**: baixa um arquivo com quatro abas (por consultor, por motivo, por semana e o que trouxe de volta)
+- **Relatório PDF**: abre a impressão do navegador. Escolha **Salvar como PDF**. A lista de e-mails liberados não vai no PDF
+
+A semana de uma recuperação é contada pelo dia em que o consultor marcou o cliente como Recuperado.
+
+## Avisos com o app fechado (opcional)
+
+Por padrão o aviso só aparece quando o consultor abre o sistema. Para o celular avisar sozinho toda manhã, às 8h (horário de Mauriti), quando houver cliente para contatar:
+
+1. **Gerar a chave.** Firebase, Configurações do projeto, aba **Cloud Messaging**, em **Certificados push da Web**, toque em **Gerar par de chaves**. Copie a chave pública e cole em `vapidKey` no arquivo `firebase-config.js`.
+2. **Plano Blaze.** Funções agendadas exigem o plano **Blaze** (pago conforme o uso) no projeto. Para esse volume de avisos o custo costuma ser zero ou centavos, mas o cartão precisa estar cadastrado.
+3. **Regras.** Cole o conteúdo novo do `firestore.rules` em Firestore, aba Regras, e publique. Ele inclui a coleção `dispositivos`, onde cada aparelho guarda o próprio token.
+4. **Publicar a função.** Na pasta do projeto, rode `firebase deploy --only functions`. Ela está em `functions/index.js` e envia só a quantidade de clientes, nunca nomes.
+5. **Ativar em cada aparelho.** O consultor abre **Ajustes**, **Avisos de retorno**, e toca em **Ativar avisos com o app fechado**.
+
+No iPhone o aviso só funciona com o app instalado na tela de início. Se a chave não estiver configurada, o botão não aparece e o resto do sistema segue normal.
+
 ## O que o sistema faz
 
 - **Busca e filtros:** por nome, telefone ou motivo da saída
@@ -67,7 +89,7 @@ Se a aba Equipe mostrar erro pedindo um índice, abra o console do navegador (F1
 - **Baixar Excel:** toda a lista, para backup ou relatório
 - **Mensagens próprias:** na aba Ajustes, cada consultor escreve seus textos de WhatsApp (variáveis {nome}, {consultor}, {negocio}, {motivo})
 - **Meta diária:** barra de contatos feitos hoje
-- **Avisos de retorno:** número de pendentes no título da página e, se o consultor ativar em Ajustes, uma notificação ao abrir o sistema. Aviso com o sistema fechado exige um servidor e não está ligado
+- **Avisos de retorno:** número de pendentes no título da página e, se o consultor ativar em Ajustes, uma notificação ao abrir o sistema. O aviso com o sistema fechado também existe, mas precisa de uma configuração a mais (veja "Avisos com o app fechado")
 - **Cliente repetido:** quando dois consultores cadastram o mesmo telefone, aparece "Também com (nome)". O sistema guarda só o número e o nome de quem cadastrou primeiro, nunca os dados do cliente
 - **O que trouxe de volta:** ao marcar Recuperado, o consultor escolhe o motivo da volta, e isso aparece em Resultados e na aba Equipe
 
@@ -81,4 +103,4 @@ No início do `index.html`, dentro de `<style>`, ficam as cores: `--primary` (am
 
 ## Observação
 
-Os arquivos foram escritos sem testar com um projeto Firebase real. Se aparecer erro de login ou de gravação, abra o console do navegador (F12) e veja a mensagem. Os erros mais comuns são regras não publicadas, e-mail fora da lista `autorizados` e domínio não autorizado.
+Os arquivos foram escritos sem testar com um projeto Firebase real. A lógica (ranking, semanas, relatórios, índice de telefones e a função de avisos) foi testada com simulação, mas o login, as regras e o envio real das notificações só se confirmam no projeto de vocês. Se aparecer erro de login ou de gravação, abra o console do navegador (F12) e veja a mensagem. Os erros mais comuns são regras não publicadas, e-mail fora da lista `autorizados` e domínio não autorizado.

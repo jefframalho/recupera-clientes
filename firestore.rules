@@ -43,6 +43,11 @@ service cloud.firestore {
       allow read, write: if liberado() && request.auth.uid == uid;
     }
 
+    // Aparelhos com aviso de retorno ligado (token de notificação). Só o dono mexe; a função agendada lê pelo servidor.
+    match /usuarios/{uid}/dispositivos/{id} {
+      allow read, write: if liberado() && request.auth.uid == uid;
+    }
+
     // Clientes de cada consultor: só o dono acessa os próprios.
     match /usuarios/{uid}/clientes/{id} {
       allow read, write: if liberado() && request.auth.uid == uid;

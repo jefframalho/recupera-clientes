@@ -1,11 +1,3 @@
-function card(c){
-  var e=etapaNome(c.etapa),lc=lastContact(c),m=motivoOf(c.motivo).nome,on=!!S.sel[c.id];
-  var chk=S.selMode?'<span class="chk'+(on?' on':'')+'" aria-hidden="true">✓</span>':"";
-  return '<button class="card'+(S.selMode&&on?' sel':'')+'" data-action="open" data-id="'+esc(c.id)+'"'+(S.selMode?' aria-pressed="'+on+'"':'')+'>'+
-    '<span class="card-top"><span class="who">'+chk+'<span class="nm">'+esc(c.nome||"Sem nome")+'</span></span><span class="pill st-'+esc(c.etapa)+'">'+esc(e)+'</span></span>'+
-    '<span class="sub">'+esc(c.negocio||"")+(c.negocio?" · ":"")+esc(m)+'</span>'+
-    '<span class="card-foot">'+nextBadge(c)+(c.dupDe?'<span class="nb dup">Também com '+esc(c.dupDe)+'</span>':"")+'<span>'+(lc?"Último contato "+rel(lc):"Ainda sem contato")+'</span>'+(c.exemplo?'<span class="tag-ex">exemplo</span>':"")+'</span></button>';
-}
 (function(){
 "use strict";
 
@@ -280,6 +272,17 @@ async function dupCheckAndRegister(list){
   if(flagged)toast(flagged+(flagged===1?" cliente já está com outro consultor.":" clientes já estão com outros consultores."));
 }
 
+/* quando o telefone de um cliente muda, o índice de repetidos acompanha */
+function syncPhone(id,telAntes){
+  var api=API();if(!api||!api.checkDup)return;
+  var c=find(id);if(!c)return;
+  var o=waNumber(telAntes),n=waNumber(c.telefone);
+  if(o===n)return;
+  if(o&&api.unregDup)api.unregDup(o).catch(function(){});
+  if(c.dupDe)edit(id,function(x){delete x.dupDe;},{keep:true});
+  if(n)dupCheckAndRegister([find(id)]);
+}
+
 /* resultados: o que trouxe o cliente de volta */
 function fatorPanel(cs){
   var fat={};
@@ -306,32 +309,119 @@ function viewAjustes(){
       '<div class="row"><button class="btn" data-action="savemsgs">Salvar mensagens</button><button class="btn ghost" data-action="resetmsgs">Restaurar padrão</button></div></div>'+
     '<div class="panel"><h3>Meta diária</h3><p class="hint">Quantos contatos você quer fazer por dia. Aparece como barra de progresso na tela de clientes. Use 0 para esconder.</p>'+
       '<div class="row"><input class="in" style="width:120px" id="cfg-meta" type="number" min="0" max="500" value="'+esc(S.cfg.meta)+'" aria-label="Meta de contatos por dia"><button class="btn" data-action="savemeta">Salvar meta</button></div></div>'+
-    '<div class="panel"><h3>Avisos de retorno</h3><p class="hint">'+permTxt+' O aviso aparece quando você abre o sistema e há clientes para contatar. Aviso com o sistema fechado exige um servidor, que ainda não está ligado.</p>'+
-      (perm==="default"?'<div class="row"><button class="btn" data-action="notif">Ativar avisos neste aparelho</button></div>':"")+'</div></div>';
+    '<div class="panel"><h3>Avisos de retorno</h3><p class="hint">'+permTxt+' Ao abrir o sistema, você é avisado se houver clientes para contatar.</p>'+
+      (perm==="default"?'<div class="row"><button class="btn" data-action="notif">Ativar avisos neste aparelho</button></div>':"")+pushBox()+'</div></div>';
+}
+/* aviso com o app fechado: só aparece se o administrador configurou a chave e a função agendada */
+function pushBox(){
+  var api=API();if(!api||!api.enablePush)return "";
+  var ok=!!(api.pushDisponivel&&api.pushDisponivel()),on=false;
+  try{on=localStorage.getItem("rc.push."+(window.RC_UID||""))==="1"&&("Notification" in window)&&Notification.permission==="granted";}catch(e){}
+  var txt=ok?(on?"Ativado neste aparelho: você recebe um aviso toda manhã, às 8h, quando houver cliente para contatar, mesmo com o sistema fechado.":"Quer receber o aviso toda manhã, às 8h, mesmo com o sistema fechado? Ative neste aparelho."):"O aviso com o sistema fechado ainda não foi configurado pelo administrador.";
+  return '<p class="hint" style="margin-top:10px">'+txt+'</p>'+(ok?'<div class="row"><button class="btn'+(on?" ghost":"")+'" data-action="'+(on?"pushoff":"pushon")+'"'+(S.pushBusy?' aria-disabled="true"':'')+'>'+(S.pushBusy?"Aguarde…":(on?"Desligar avisos com o app fechado":"Ativar avisos com o app fechado"))+'</button></div>':"");
+}
+function pushErro(e){
+  var c=e&&e.code;
+  if(c==="sem-chave")return "Os avisos com o app fechado ainda não foram configurados.";
+  if(c==="negado")return "Você não permitiu os avisos neste aparelho. Libere nas configurações do navegador e tente de novo.";
+  if(c==="sem-suporte")return "Este aparelho ou navegador não aceita avisos com o app fechado. No iPhone, instale o app na tela de início primeiro.";
+  return "Não consegui ativar os avisos. Confira a internet e tente de novo.";
 }
 
 /* aba Equipe (só para gestores) */
-function emptyBucket(name){return {nome:name,total:0,novo:0,contatado:0,negociando:0,recuperado:0,perdido:0,hoje:0,sete:0};}
+function emptyBucket(name){return {nome:name,total:0,novo:0,contatado:0,negociando:0,recuperado:0,perdido:0,hoje:0,sete:0,rec30:0};}
+function shiftDay(s,n){var d=new Date(s+"T00:00:00");d.setDate(d.getDate()+n);return dstr(d);}
+function weekStart(s){var d=new Date(s+"T00:00:00");d.setDate(d.getDate()-((d.getDay()+6)%7));return dstr(d);}
+function fmtBR(s){return s?s.slice(8,10)+"/"+s.slice(5,7)+"/"+s.slice(0,4):"";}
+/* dia em que o cliente virou Recuperado, lido do histórico de etapas */
+function recoveredAt(c){
+  if(c.etapa!=="recuperado")return "";
+  var h=(c.hist||[]).filter(function(x){return x.tipo==="Etapa"&&/→ Recuperado$/.test(x.texto||"");}).sort(function(a,b){return b.em.localeCompare(a.em);})[0];
+  var iso=h?h.em:c.atualizadoEm;
+  return iso?dayOf(iso):"";
+}
 function teamStats(){
-  var T=S.team,by={},t=today(),d7=addDays(-6);
+  var T=S.team,by={},t=today(),d7=addDays(-6),d30=addDays(-29),wk0=weekStart(t);
   Object.keys(T.users||{}).forEach(function(u){var p=T.users[u]||{};by[u]=emptyBucket(p.nome||p.email||"Consultor");});
-  var mot={},fat={},tot=emptyBucket("Total");
+  var mot={},fat={},tot=emptyBucket("Total"),weeks=[],wmap={};
+  for(var i=7;i>=0;i--){var w0={ini:shiftDay(wk0,-7*i),rec:0,cont:0};weeks.push(w0);wmap[w0.ini]=w0;}
   (T.clients||[]).forEach(function(c){
     if(c.exemplo)return;
     var b=by[c.uid]||(by[c.uid]=emptyBucket("Consultor"));
     var h=countContacts([c],t,t),s=countContacts([c],d7,t);
+    var rd=recoveredAt(c),r30=(rd&&rd>=d30)?1:0;
     [b,tot].forEach(function(x){
-      x.total++;if(x[c.etapa]!=null)x[c.etapa]++;x.hoje+=h;x.sete+=s;
+      x.total++;if(x[c.etapa]!=null)x[c.etapa]++;x.hoje+=h;x.sete+=s;x.rec30+=r30;
     });
     mot[c.motivo]=mot[c.motivo]||{n:0,v:0};mot[c.motivo].n++;
     if(c.etapa==="recuperado"){mot[c.motivo].v++;if(c.fator)fat[c.fator]=(fat[c.fator]||0)+1;}
+    if(rd&&wmap[weekStart(rd)])wmap[weekStart(rd)].rec++;
+    (c.hist||[]).forEach(function(x){
+      if(CONTATOS.indexOf(x.tipo)>=0){var w=wmap[weekStart(dayOf(x.em))];if(w)w.cont++;}
+    });
   });
   var rows=Object.keys(by).map(function(u){return by[u];}).sort(function(a,b){return b.recuperado-a.recuperado||b.total-a.total;});
-  return {rows:rows,tot:tot,mot:mot,fat:fat};
+  return {rows:rows,tot:tot,mot:mot,fat:fat,weeks:weeks};
 }
 function teamRow(b,isTot){
   var rate=b.total?Math.round(b.recuperado/b.total*100)+"%":"–";
-  return '<tr'+(isTot?' class="tot"':'')+'><td>'+esc(b.nome)+'</td><td>'+b.total+'</td><td>'+(b.contatado+b.negociando)+'</td><td>'+b.recuperado+'</td><td>'+b.perdido+'</td><td>'+rate+'</td><td>'+b.hoje+'</td><td>'+b.sete+'</td></tr>';
+  return '<tr'+(isTot?' class="tot"':'')+'><td>'+esc(b.nome)+'</td><td>'+b.total+'</td><td>'+(b.contatado+b.negociando)+'</td><td>'+b.recuperado+'</td><td>'+b.rec30+'</td><td>'+b.perdido+'</td><td>'+rate+'</td><td>'+b.hoje+'</td><td>'+b.sete+'</td></tr>';
+}
+function rankingPanel(st){
+  var rows=st.rows.filter(function(b){return b.total>0;});
+  if(!rows.length)return "";
+  var mx=Math.max.apply(null,rows.map(function(b){return b.recuperado;}).concat([1]));
+  var list=rows.map(function(b,i){
+    var rate=b.total?Math.round(b.recuperado/b.total*100)+"%":"–";
+    return '<div class="rk'+(i===0&&b.recuperado>0?" p1":"")+'"><span class="pos">'+(i+1)+'</span><div class="rkmid"><div class="nm2">'+esc(b.nome)+'</div><div class="bar" aria-hidden="true"><i style="width:'+(b.recuperado/mx*100)+'%"></i></div><div class="meta">Taxa '+rate+' · '+b.rec30+' nos últimos 30 dias · '+b.sete+' contatos em 7 dias</div></div><span class="big">'+b.recuperado+'</span></div>';
+  }).join("");
+  return '<div class="panel"><h3>Ranking de recuperados</h3><div class="rank">'+list+'</div><p class="hint">Ordenado pelo total de clientes recuperados. Em caso de empate, vem primeiro quem tem mais clientes.</p></div>';
+}
+function weekBars(weeks,key){
+  var mx=Math.max(1,Math.max.apply(null,weeks.map(function(w){return w[key];})));
+  return '<div class="days weeks">'+weeks.map(function(w){
+    return '<div class="day"><span class="v">'+w[key]+'</span><i style="height:'+Math.max(2,Math.round(w[key]/mx*80))+'px"></i><small>'+fmtDM(w.ini)+'</small></div>';
+  }).join("")+'</div>';
+}
+/* relatório da equipe: Excel (ou CSV, se o leitor de Excel não carregar) e PDF pela impressão do navegador */
+function downloadCsv(rows,name){
+  var csv="﻿"+rows.map(function(r){return r.map(function(v){return '"'+String(v).replace(/"/g,'""')+'"';}).join(";");}).join("\r\n");
+  var a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download=name+".csv";
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},500);
+}
+function exportTeam(){
+  if(!S.team){toast("Carregue os números da equipe primeiro.");return;}
+  var st=teamStats(),name="equipe-"+today();
+  var cons=[["Consultor","Clientes","Em conversa","Recuperados","Recuperados em 30 dias","Perdidos","Taxa de recuperação","Contatos hoje","Contatos em 7 dias"]]
+    .concat(st.rows.concat([st.tot]).map(function(b){
+      return [b.nome,b.total,b.contatado+b.negociando,b.recuperado,b.rec30,b.perdido,b.total?Math.round(b.recuperado/b.total*100)+"%":"",b.hoje,b.sete];
+    }));
+  var mk=Object.keys(st.mot).sort(function(a,b){return st.mot[b].n-st.mot[a].n;});
+  var mot=[["Motivo da saída","Clientes","Voltaram"]].concat(mk.map(function(k){return [motivoOf(k).nome,st.mot[k].n,st.mot[k].v];}));
+  var sem=[["Semana (começa na segunda)","Recuperados","Contatos feitos"]].concat(st.weeks.map(function(w){return [fmtBR(w.ini),w.rec,w.cont];}));
+  var fk=Object.keys(st.fat).sort(function(a,b){return st.fat[b]-st.fat[a];});
+  var fat=[["O que trouxe de volta","Clientes"]].concat(fk.map(function(k){return [k,st.fat[k]];}));
+  if(window.XLSX){
+    try{
+      var wb=window.XLSX.utils.book_new();
+      [["Por consultor",cons,[22,10,12,12,14,10,12,12,14]],["Por motivo",mot,[28,10,10]],["Por semana",sem,[24,12,14]],["O que trouxe de volta",fat,[28,10]]].forEach(function(s){
+        var ws=window.XLSX.utils.aoa_to_sheet(s[1]);
+        ws["!cols"]=s[2].map(function(w){return {wch:w};});
+        window.XLSX.utils.book_append_sheet(wb,ws,s[0]);
+      });
+      window.XLSX.writeFile(wb,name+".xlsx");
+      toast("Relatório baixado.");return;
+    }catch(e){}
+  }
+  downloadCsv(cons,name);
+  toast("Arquivo CSV baixado. Abre no Excel.");
+}
+function printTeam(){
+  if(!S.team){toast("Carregue os números da equipe primeiro.");return;}
+  toast("Na janela que abrir, escolha Salvar como PDF.");
+  setTimeout(function(){window.print();},500);
 }
 function authPanel(){
   var list=S.auth||[],mine=String(window.RC_EMAIL||"").toLowerCase();
@@ -347,22 +437,27 @@ function authPanel(){
 }
 function viewEquipe(){
   if(!S.isGestor)return '<div class="empty">Esta área é só para gestores.</div>';
-  var head='<div class="listhead"><h2>Equipe</h2><button class="btn sm" data-action="teamload"'+(S.teamBusy?' aria-disabled="true"':'')+'>'+(S.teamBusy?"Carregando…":"Atualizar")+'</button></div>';
+  var acts='<div class="row noprint">'+(S.team?'<button class="btn sm ghost" data-action="teamxlsx">Relatório Excel</button><button class="btn sm ghost" data-action="teampdf">Relatório PDF</button>':"")+
+    '<button class="btn sm" data-action="teamload"'+(S.teamBusy?' aria-disabled="true"':'')+'>'+(S.teamBusy?"Carregando…":"Atualizar")+'</button></div>';
+  var head='<div class="listhead"><h2>Equipe</h2>'+acts+'</div>';
   var err=S.teamErr?'<p class="err">'+esc(S.teamErr)+'</p>':"";
   if(!S.team)return '<div class="view-gap">'+head+err+'<div class="empty">'+(S.teamBusy?"Carregando os números do time…":"Toque em Atualizar para ver os números do time.")+'</div>'+authPanel()+'</div>';
   var st=teamStats();
-  var table='<div class="tbl nums"><table><thead><tr><th>Consultor</th><th>Clientes</th><th>Em conversa</th><th>Recuperados</th><th>Perdidos</th><th>Taxa</th><th>Contatos hoje</th><th>7 dias</th></tr></thead><tbody>'+st.rows.map(function(b){return teamRow(b,false);}).join("")+teamRow(st.tot,true)+'</tbody></table></div>';
+  var table='<div class="tbl nums"><table><thead><tr><th>Consultor</th><th>Clientes</th><th>Em conversa</th><th>Recuperados</th><th>Recup. 30 dias</th><th>Perdidos</th><th>Taxa</th><th>Contatos hoje</th><th>7 dias</th></tr></thead><tbody>'+st.rows.map(function(b){return teamRow(b,false);}).join("")+teamRow(st.tot,true)+'</tbody></table></div>';
   var mk=Object.keys(st.mot).sort(function(a,b){return st.mot[b].n-st.mot[a].n;});
   var mx=Math.max.apply(null,mk.map(function(k){return st.mot[k].n;}).concat([1]));
   var mot=mk.map(function(k){return '<div class="rowbar"><span class="lab">'+esc(motivoOf(k).nome)+'</span><span class="bar"><i style="width:'+(st.mot[k].n/mx*100)+'%"></i></span><span class="num">'+st.mot[k].n+' · '+st.mot[k].v+' voltaram</span></div>';}).join("");
   var fk=Object.keys(st.fat).sort(function(a,b){return st.fat[b]-st.fat[a];});
   var fmx=Math.max.apply(null,fk.map(function(k){return st.fat[k];}).concat([1]));
   var fat=fk.map(function(k){return '<div class="rowbar"><span class="lab">'+esc(k)+'</span><span class="bar"><i style="width:'+(st.fat[k]/fmx*100)+'%"></i></span><span class="num">'+st.fat[k]+'</span></div>';}).join("");
-  return '<div class="view-gap">'+head+err+
+  return '<div class="view-gap">'+head+'<p class="printhead">Relatório da equipe · '+fmtBR(today())+'</p>'+err+
+    rankingPanel(st)+
     '<div class="panel"><h3>Resultado por consultor</h3>'+table+'<p class="hint">Mostra só números, sem nomes de clientes. Clientes de exemplo não entram na conta.</p></div>'+
+    '<div class="panel"><h3>Recuperados por semana</h3>'+weekBars(st.weeks,"rec")+'<p class="hint">Últimas 8 semanas. Cada coluna é uma semana, com a data da segunda-feira. Conta pelo dia em que o cliente foi marcado como Recuperado.</p></div>'+
+    '<div class="panel"><h3>Contatos por semana</h3>'+weekBars(st.weeks,"cont")+'<p class="hint">WhatsApp, ligação e visita registrados pelos consultores.</p></div>'+
     (mot?'<div class="panel"><h3>Por que os clientes saíram</h3>'+mot+'</div>':"")+
     (fat?'<div class="panel"><h3>O que trouxe de volta</h3>'+fat+'</div>':"")+
-    authPanel()+'</div>';
+    '<div class="noprint">'+authPanel()+'</div></div>';
 }
 async function loadTeam(){
   var api=API();
@@ -440,11 +535,12 @@ function nextBadge(c){
   return '<span class="nb">'+fmtDM(c.proximo)+'</span>';
 }
 function card(c){
-  var e=etapaNome(c.etapa),lc=lastContact(c),m=motivoOf(c.motivo).nome;
-  return '<button class="card" data-action="open" data-id="'+esc(c.id)+'">'+
-    '<span class="card-top"><span class="nm">'+esc(c.nome||"Sem nome")+'</span><span class="pill st-'+esc(c.etapa)+'">'+esc(e)+'</span></span>'+
+  var e=etapaNome(c.etapa),lc=lastContact(c),m=motivoOf(c.motivo).nome,on=!!S.sel[c.id];
+  var chk=S.selMode?'<span class="chk'+(on?' on':'')+'" aria-hidden="true">✓</span>':"";
+  return '<button class="card'+(S.selMode&&on?' sel':'')+'" data-action="open" data-id="'+esc(c.id)+'"'+(S.selMode?' aria-pressed="'+on+'"':'')+'>'+
+    '<span class="card-top"><span class="who">'+chk+'<span class="nm">'+esc(c.nome||"Sem nome")+'</span></span><span class="pill st-'+esc(c.etapa)+'">'+esc(e)+'</span></span>'+
     '<span class="sub">'+esc(c.negocio||"")+(c.negocio?" · ":"")+esc(m)+'</span>'+
-    '<span class="card-foot">'+nextBadge(c)+'<span>'+(lc?"Último contato "+rel(lc):"Ainda sem contato")+'</span>'+(c.exemplo?'<span class="tag-ex">exemplo</span>':"")+'</span></button>';
+    '<span class="card-foot">'+nextBadge(c)+(c.dupDe?'<span class="nb dup">Também com '+esc(c.dupDe)+'</span>':"")+'<span>'+(lc?"Último contato "+rel(lc):"Ainda sem contato")+'</span>'+(c.exemplo?'<span class="tag-ex">exemplo</span>':"")+'</span></button>';
 }
 function viewRoteiro(){
   var items=OBJECOES.map(function(o,i){
@@ -889,7 +985,25 @@ document.addEventListener("click",function(e){
     case "notif":
       if("Notification" in window){Notification.requestPermission().then(function(p){S.notified=false;render(false);toast(p==="granted"?"Avisos ativados.":"Os avisos não foram ativados.");});}
       break;
+    case "pushon":
+      if(S.pushBusy)break;
+      S.pushBusy=true;render(false);
+      API().enablePush().then(function(){
+        try{localStorage.setItem("rc.push."+(window.RC_UID||""),"1");}catch(x){}
+        toast("Avisos com o app fechado ativados.");
+      }).catch(function(e){S.err=pushErro(e);renderNotice();}).then(function(){S.pushBusy=false;render(false);});
+      break;
+    case "pushoff":
+      if(S.pushBusy)break;
+      S.pushBusy=true;render(false);
+      API().disablePush().then(function(){
+        try{localStorage.removeItem("rc.push."+(window.RC_UID||""));}catch(x){}
+        toast("Avisos com o app fechado desligados.");
+      }).then(function(){S.pushBusy=false;render(false);});
+      break;
     case "teamload":loadTeam();break;
+    case "teamxlsx":exportTeam();break;
+    case "teampdf":printTeam();break;
     case "auadd":authAdd();break;
     case "aurm":
       if(S.authDel===t.dataset.e)authRemove(t.dataset.e);else{S.authDel=t.dataset.e;render(false);}
@@ -919,7 +1033,9 @@ document.addEventListener("change",function(e){
   var f=t.dataset&&t.dataset.field;if(!f||!S.openId)return;
   var id=S.openId,val=t.value.trim();
   var keep=(f!=="motivo"&&f!=="proximo");
+  var antes=find(id),telAntes=antes?antes.telefone:"";
   edit(id,function(c){c[f]=val;},{keep:keep});
+  if(f==="telefone")syncPhone(id,telAntes);
   if(f==="motivo"){S.msgText={};renderDrawer();}
   else if(keep){
     var c=find(id);if(!c)return;
